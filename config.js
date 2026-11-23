@@ -1,3 +1,3 @@
-// GitHub Pages 展示版。要全班共用資料，需另外連接 Supabase。
-// 只填入 Supabase publishable / anon key，不可填寫 secret 或 service_role key。
-window.GROUP_CONFIG = { supabaseUrl: '', supabaseAnonKey: '' };
+// Google Apps Script 的公開 /exec 網址，部署後填入。
+// 此處不可放 Google 帳號密碼、私人代碼或 API 密鑰。
+window.GROUP_CONFIG = { googleScriptUrl: '' };
