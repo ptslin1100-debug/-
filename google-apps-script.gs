@@ -11,7 +11,7 @@
  * 公開的讀取 API 只傳名單與分組狀態；不得公開試算表本體。
  */
 const ROSTER = [["01","江榮展","Nick"],["02","廖煒立","Willy"],["03","徐其祥","Mark"],["04","於欣慧","Kelly"],["05","洪靖宜","Amber"],["06","翁加偉","William"],["07","曾茂榮",""],["08","陳韋伊","Wendy"],["09","李思萱","Alicia"],["11","林逸賢","James"],["12","高硯清","Maria"],["14","董建一","Bryan"],["15","呂逸庭","Grace"],["16","王鈞賢","Jason"],["17","陳柔安","Ruby"],["18","馬瑞琪","Floria"],["19","陳宥彤",""],["20","李佳樺","Cathy"],["21","彭思嘉","Scarlett"],["22","張志騰","Rick"],["23","林佳樺",""],["24","連丈賢","Daniel"],["26","曾雯瑾",""],["27","陳昀資",""],["28","鄧棋耀","Cassell"],["29","趙克秦","Iris"],["30","張稚婉","Phoenix"],["31","石在元","Barry"],["32","余佩容","Judy"],["33","黃詩慧","Sylvie"],["34","朱泙慧","Claire"],["35","賴佳妤","Casey"],["36","吳文瑜","Amanda"],["37","葉日如","SnowGuy"],["38","楊芷芸","Stella"],["39","盧怡伶","Bonnie"],["40","余禮安","Lian"]];
-const SHEET_NAME='分組狀態', CODE_SHEET='個人代碼';
+const SHEET_NAME='分組狀態', CODE_SHEET='個人代碼', GROUP_SHEET='組別名稱';
 function setup() {
   const props=PropertiesService.getScriptProperties();
   if(props.getProperty('SHEET_ID')) {
@@ -30,6 +30,10 @@ function setup() {
   codes.getRange(2,1,ROSTER.length,3).setValues(ROSTER.map(p=>[p[0],p[1],Utilities.getUuid().replace(/-/g,'').slice(0,12)]));
   codes.getRange(1,1,1,3).setFontWeight('bold').setBackground('#ffe8ba');
   codes.setFrozenRows(1); codes.autoResizeColumns(1,3);
+  const names=ss.insertSheet(GROUP_SHEET);
+  names.getRange(1,1,1,2).setValues([['組別','組名']]);
+  names.getRange(2,1,7,2).setValues(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組']));
+  names.setFrozenRows(1); names.autoResizeColumns(1,2);
   props.setProperty('SHEET_ID',ss.getId());
   Logger.log('建立成功，Google Sheet: '+ss.getUrl());
 }
@@ -45,17 +49,43 @@ function publicRows_(){
     status:r[3]||'尋找組別',group_no:r[4]===''?null:Number(r[4])
   }));
 }
+function groupNames_(){
+  const sh=getBook_().getSheetByName(GROUP_SHEET);
+  if(!sh)return Object.fromEntries(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組']));
+  return Object.fromEntries(sh.getRange(2,1,7,2).getValues().map(r=>[Number(r[0]),String(r[1]||'第 '+r[0]+' 組')]));
+}
+function authorize_(ss,seat,code){
+  const sh=ss.getSheetByName(CODE_SHEET), values=sh.getRange(2,1,sh.getLastRow()-1,3).getDisplayValues();
+  const found=values.find(x=>String(x[0]).padStart(2,'0')===seat);
+  if(!found||!code||found[2]!==code)throw Error('座號或個人代碼不正確');
+}
+function renameGroup_(p){
+  const seat=String(p.seat||'').padStart(2,'0'), code=String(p.code||'').trim();
+  const group=Number(p.group_no), name=String(p.group_name||'').trim();
+  if(!Number.isInteger(group)||group<1||group>7)throw Error('組別不正確');
+  if(name.length<1||name.length>24)throw Error('組名長度必須為 1–24 字');
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try {
+    const ss=getBook_();authorize_(ss,seat,code);
+    const mine=publicRows_().find(r=>r.seat===seat);
+    if(!mine||mine.group_no!==group||!['確定入組','考慮中'].includes(mine.status))throw Error('只能修改自己所在或考慮中的組別名稱');
+    let sh=ss.getSheetByName(GROUP_SHEET);
+    if(!sh){sh=ss.insertSheet(GROUP_SHEET);sh.getRange(1,1,1,2).setValues([['組別','組名']]);sh.getRange(2,1,7,2).setValues(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組']));}
+    sh.getRange(group+1,2).setValue(name);SpreadsheetApp.flush();
+    return {ok:true};
+  } finally {lock.releaseLock();}
+}
 function doGet(e){
   const callback=String(e.parameter.callback||'');
   if(!/^[a-zA-Z_$][\w$\.]{0,99}$/.test(callback)) return ContentService.createTextOutput('Invalid callback').setMimeType(ContentService.MimeType.TEXT);
   let data;
-  try {data={ok:true,roster:publicRows_(),at:new Date().toISOString()};}
+  try {data={ok:true,roster:publicRows_(),groupNames:groupNames_(),at:new Date().toISOString()};}
   catch(err){data={ok:false,error:String(err.message)};}
   return ContentService.createTextOutput(callback+'('+JSON.stringify(data)+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 function doPost(e){
   let result;
-  try {result=save_(e.parameter||{});}
+  try {const p=e.parameter||{};result=p.action==='rename'?renameGroup_(p):save_(p);}
   catch(err){result={ok:false,error:String(err.message)};}
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -71,9 +101,7 @@ function save_(p){
   lock.waitLock(10000);
   try{
     const ss=getBook_(), sheet=ss.getSheetByName(SHEET_NAME), codeSheet=ss.getSheetByName(CODE_SHEET);
-    const values=codeSheet.getRange(2,1,codeSheet.getLastRow()-1,3).getDisplayValues();
-    const stored=values.find(x=>String(x[0]).padStart(2,'0')===seat);
-    if(!stored||!code||stored[2]!==code) throw Error('座號或個人代碼不正確');
+    authorize_(ss,seat,code);
     const roster=publicRows_();
     const idx=roster.findIndex(r=>r.seat===seat);
     if(idx<0) throw Error('不存在此座號');
