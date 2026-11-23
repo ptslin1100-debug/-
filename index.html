@@ -33,7 +33,7 @@ function render(){
    $('claimArea').classList.add('hidden');$('editArea').classList.remove('hidden');
    $('identity').textContent=me?me.seat+' '+me.name:'座號 '+mySeat;
    $('leaveBtn').disabled=!me||me.status==='尋找組別';
-   $('renameBtn').disabled=!me||me.status==='尋找組別'||!me.group_no;
+   $('renameBtn').disabled=!me||me.status!=='確定入組'||!me.group_no;
    if(document.activeElement!==$('renameGroup'))$('renameGroup').value=me?.group_no?groupNames[me.group_no]:'';
  }else{$('claimArea').classList.remove('hidden');$('editArea').classList.add('hidden');}
 }
@@ -102,7 +102,7 @@ async function update(status,group){
 }
 async function rename(){
  const me=roster.find(r=>r.seat===mySeat),name=$('renameGroup').value.trim();
- if(!me||!me.group_no||me.status==='尋找組別')return msg('請先加入或考慮某組，才能設定該組組名',true);
+ if(!me||!me.group_no||me.status!=='確定入組')return msg('只有該組已確定入組的同學可以修改組名',true);
  if(!name||name.length>24)return msg('組名需要 1–24 個字',true);
  busy=true;$('renameBtn').disabled=true;
  try{
