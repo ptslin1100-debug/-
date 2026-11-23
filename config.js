@@ -1,3 +1,2 @@
-// Google Apps Script 的公開 /exec 網址，部署後填入。
-// 此處不可放 Google 帳號密碼、私人代碼或 API 密鑰。
-window.GROUP_CONFIG = { googleScriptUrl: '' };
+// 班級分組 Google 試算表同步端點（僅公開網址，不存放個人代碼）
+window.GROUP_CONFIG = { googleScriptUrl: 'https://script.google.com/macros/s/AKfycbxGprzUTxMrd0xoCLTfRNKQXcxKaN8HAT80o303f9_F6e6swSwSplP_BRix6hvcE2u-/exec' };
