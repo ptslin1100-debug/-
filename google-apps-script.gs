@@ -34,6 +34,7 @@ function setup() {
   names.getRange(1,1,1,2).setValues([['組別','組名']]);
   names.getRange(2,1,7,2).setValues(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組']));
   names.setFrozenRows(1); names.autoResizeColumns(1,2);
+  const names=ss.insertSheet(GROUP_SHEET); names.getRange(1,1,1,2).setValues([['組別','組名']]); names.getRange(2,1,7,2).setValues(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組']));
   props.setProperty('SHEET_ID',ss.getId());
   Logger.log('建立成功，Google Sheet: '+ss.getUrl());
 }
@@ -74,6 +75,18 @@ function renameGroup_(p){
     sh.getRange(group+1,2).setValue(name);SpreadsheetApp.flush();
     return {ok:true};
   } finally {lock.releaseLock();}
+}
+function groupNames_(){const sh=getBook_().getSheetByName(GROUP_SHEET); if(!sh)return Object.fromEntries(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組'])); return Object.fromEntries(sh.getRange(2,1,7,2).getValues().map(r=>[Number(r[0]),String(r[1]||'第 '+r[0]+' 組')]));}
+function authorize_(ss,seat,code){const sh=ss.getSheetByName(CODE_SHEET);const values=sh.getRange(2,1,sh.getLastRow()-1,3).getDisplayValues(); const stored=values.find(x=>String(x[0]).padStart(2,'0')===seat);if(!stored||!code||stored[2]!==code)throw Error('座號或個人代碼不正確')}
+function renameGroup_(p){
+const seat=String(p.seat||'').padStart(2,'0'),code=String(p.code||'').trim(),g=Number(p.group_no),name=String(p.group_name||'').trim();
+if(!Number.isInteger(g)||g<1||g>7)throw Error('組別不正確');
+if(!name||name.length>24)throw Error('組名須為 1–24 字');
+const lock=LockService.getScriptLock();lock.waitLock(10000);
+try{const ss=getBook_();authorize_(ss,seat,code);const mine=publicRows_().find(r=>r.seat===seat);if(!mine||mine.group_no!==g||mine.status!=='確定入組')throw Error('只有此組的正式組員能修改組名');
+let sh=ss.getSheetByName(GROUP_SHEET);if(!sh){sh=ss.insertSheet(GROUP_SHEET);sh.getRange(1,1,1,2).setValues([['組別','組名']]);sh.getRange(2,1,7,2).setValues(Array.from({length:7},(_,i)=>[i+1,'第 '+(i+1)+' 組']));}
+sh.getRange(g+1,2).setValue(name);SpreadsheetApp.flush();return {ok:true};
+}finally{lock.releaseLock();}
 }
 function doGet(e){
   const callback=String(e.parameter.callback||'');
